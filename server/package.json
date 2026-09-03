@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "db:migrate": "tsx src/db/cli.ts migrate",
     "db:seed": "tsx src/db/cli.ts seed",
-    "db:reset": "tsx src/db/cli.ts reset"
+    "db:reset": "tsx src/db/cli.ts reset",
+    "db:checkpoint": "tsx src/db/cli.ts checkpoint"
   },
   "dependencies": {
     "@app/shared": "*",

@@ -50,3 +50,26 @@ export function runMigrations(db: Db, dir?: string): string[] {
 
   return ran
 }
+
+/**
+ * Drops every user-created table and view so migrations can run from scratch.
+ * Done in place rather than by deleting the file: a dev server holding this
+ * database open would keep writing to the deleted inode and silently lose data.
+ */
+export function resetSchema(db: Db): void {
+  const objects = db
+    .prepare<[], { name: string; type: string }>(
+      `SELECT name, type FROM sqlite_master
+       WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%'`,
+    )
+    .all()
+
+  db.pragma('foreign_keys = OFF')
+  db.transaction(() => {
+    for (const object of objects) {
+      const keyword = object.type === 'view' ? 'VIEW' : 'TABLE'
+      db.exec(`DROP ${keyword} IF EXISTS "${object.name.replace(/"/g, '""')}"`)
+    }
+  })()
+  db.pragma('foreign_keys = ON')
+}
