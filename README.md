@@ -26,7 +26,7 @@ npm run dev             # API on :3001, web app on :5173
 Open **http://localhost:5173**. Vite proxies `/api/*` to Express, so the browser sees a single origin
 and there is no CORS to configure.
 
-Verify the whole thing at any time with `npm run check` (typecheck + lint + tests, ~4s).
+Verify the whole thing at any time with `npm run check` (typecheck + lint + tests, ~5.4s).
 
 ### About that `npm install` warning
 
@@ -48,21 +48,21 @@ npm install-scripts approve better-sqlite3 esbuild
 
 ## The development loop
 
-| What you do         | What happens                         | Measured  |
-| ------------------- | ------------------------------------ | --------- |
-| `npm run dev`       | Both servers up                      | **0.8s**  |
-| Edit a client file  | Vite HMR, no reload, state preserved | **~10ms** |
-| Edit a server file  | `tsx` restarts the API               | **0.4s**  |
-| `npm test`          | 7 tests against in-memory SQLite     | **0.7s**  |
-| `npm run typecheck` | `tsc --noEmit`, all three packages   | **2.1s**  |
-| `npm run check`     | typecheck + lint + test              | **~4s**   |
-| `npm run build`     | Server bundle + client bundle        | **1.1s**  |
+| What you do         | What happens                                        | Measured  |
+| ------------------- | --------------------------------------------------- | --------- |
+| `npm run dev`       | Both servers up                                     | **0.8s**  |
+| Edit a client file  | Vite HMR, no reload, state preserved                | **~10ms** |
+| Edit a server file  | `tsx` restarts the API                              | **0.4s**  |
+| `npm test`          | 28 tests: API against in-memory SQLite, UI in jsdom | **2.7s**  |
+| `npm run typecheck` | `tsc --noEmit`, all three packages                  | **2.1s**  |
+| `npm run check`     | typecheck + lint + test                             | **~5.4s** |
+| `npm run build`     | Server bundle + client bundle                       | **1.1s**  |
 
 Type errors surface in your editor, not in the dev server — Vite and `tsx` strip types without
 checking them, which is why they are this fast. `npm run check` is the gate before you commit.
 
 `npm run test:watch` re-runs affected tests as you edit, which is usually a tighter loop than
-clicking through the UI.
+clicking through the UI. It watches both workspaces; `-w server` or `-w client` narrows it.
 
 ---
 
@@ -88,6 +88,7 @@ client/src/
   lib/api.ts              typed fetch wrapper, throws ApiRequestError
   lib/useTasks.ts         data loading + mutations
   components/             TaskForm, TaskList
+  __tests__/              vitest + React Testing Library, fetch stubbed
 ```
 
 The layering rule: **routes never write SQL, repositories never touch `req`/`res`.** That is what
@@ -247,6 +248,42 @@ it('creates a project', async () => {
 
 ---
 
+## Testing
+
+28 tests, no test database to provision and no dev server to have running.
+
+**Server** (`server/src/__tests__/`) — vitest + supertest. Each test gets a fresh `:memory:`
+database, so tests are isolated and nothing needs cleaning up:
+
+```ts
+beforeEach(() => {
+  db = createDatabase(':memory:')
+  app = createApp(db)
+})
+```
+
+That works because `createApp` takes the database as an argument. Requests go through the real
+Express stack — routing, zod validation, error middleware, SQL — against a real SQLite database. The
+only thing not exercised is the network socket.
+
+**Client** (`client/src/__tests__/`) — vitest + React Testing Library in jsdom. `fetch` is stubbed
+per test by the `mockFetch` helper in `__tests__/helpers.ts`, which records what was sent so tests
+can assert on the request:
+
+```ts
+mockFetch({ 'GET /api/tasks': () => jsonResponse({ items: [makeTask()], total: 1 }) })
+render(<App />)
+expect(await screen.findByText('A task')).toBeInTheDocument()
+```
+
+`App.test.tsx` backs those handlers with a mutable array, so a create or toggle is visible to the
+refetch that follows — enough to cover `useTasks` end to end without a server.
+
+Queries go through roles and labels (`getByRole('button', { name: 'Add' })`) rather than test ids, so
+the tests break when the UI stops being reachable, not when a class name changes.
+
+---
+
 ## Working with the database
 
 ### Conventions
@@ -295,19 +332,19 @@ the same file rather than deleting it, so the running server keeps working.
 
 Run from the repo root; add `-w server` or `-w client` to target one workspace.
 
-| Command                           | Does                                            |
-| --------------------------------- | ----------------------------------------------- |
-| `npm run dev`                     | Server and client together                      |
-| `npm run check`                   | typecheck + lint + test — run before committing |
-| `npm test` / `npm run test:watch` | Vitest, one-shot or watch                       |
-| `npm run typecheck`               | `tsc --noEmit` across all packages              |
-| `npm run lint` / `npm run format` | ESLint / Prettier                               |
-| `npm run build`                   | Server → `server/dist`, client → `client/dist`  |
-| `npm start`                       | Run the built server                            |
-| `npm run db:migrate`              | Apply pending migrations                        |
-| `npm run db:seed`                 | Insert demo rows (no-op if the table has data)  |
-| `npm run db:reset`                | Drop all tables, migrate, seed                  |
-| `npm run db:checkpoint`           | Fold the WAL into the main database file        |
+| Command                           | Does                                             |
+| --------------------------------- | ------------------------------------------------ |
+| `npm run dev`                     | Server and client together                       |
+| `npm run check`                   | typecheck + lint + test — run before committing  |
+| `npm test` / `npm run test:watch` | Vitest across both workspaces, one-shot or watch |
+| `npm run typecheck`               | `tsc --noEmit` across all packages               |
+| `npm run lint` / `npm run format` | ESLint / Prettier                                |
+| `npm run build`                   | Server → `server/dist`, client → `client/dist`   |
+| `npm start`                       | Run the built server                             |
+| `npm run db:migrate`              | Apply pending migrations                         |
+| `npm run db:seed`                 | Insert demo rows (no-op if the table has data)   |
+| `npm run db:reset`                | Drop all tables, migrate, seed                   |
+| `npm run db:checkpoint`           | Fold the WAL into the main database file         |
 
 ---
 

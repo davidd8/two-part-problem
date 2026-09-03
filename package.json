@@ -25,8 +25,10 @@
     "db:seed": "npm run db:seed -w server",
     "db:reset": "npm run db:reset -w server",
     "check": "npm run typecheck && npm run lint && npm test",
-    "test:watch": "npm run test:watch -w server",
-    "db:checkpoint": "npm run db:checkpoint -w server"
+    "test:watch": "concurrently -n server,client -c blue,magenta \"npm:test:watch:server\" \"npm:test:watch:client\"",
+    "db:checkpoint": "npm run db:checkpoint -w server",
+    "test:watch:server": "npm run test:watch -w server",
+    "test:watch:client": "npm run test:watch -w client"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
