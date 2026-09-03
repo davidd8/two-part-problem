@@ -3,6 +3,12 @@ dist/
 coverage/
 *.log
 
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # SQLite database files (keep the directory, ignore the data)
 data/*
 !data/.gitkeep

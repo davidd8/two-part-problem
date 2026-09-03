@@ -23,6 +23,12 @@ npm run db:reset        # create the database, run migrations, insert demo rows
 npm run dev             # API on :3001, web app on :5173
 ```
 
+To run the end-to-end tests you also need the browser binary, which is not in the repo:
+
+```bash
+npx playwright install chromium
+```
+
 Open **http://localhost:5173**. Vite proxies `/api/*` to Express, so the browser sees a single origin
 and there is no CORS to configure.
 
@@ -89,6 +95,7 @@ client/src/
   lib/useTasks.ts         data loading + mutations
   components/             TaskForm, TaskList
   __tests__/              vitest + React Testing Library, fetch stubbed
+e2e/                      Playwright specs; own ports and own database
 ```
 
 The layering rule: **routes never write SQL, repositories never touch `req`/`res`.** That is what
@@ -250,7 +257,8 @@ it('creates a project', async () => {
 
 ## Testing
 
-28 tests, no test database to provision and no dev server to have running.
+34 tests in three tiers: 28 fast unit/integration tests that need nothing running, and 6
+end-to-end tests that drive a real browser against the real stack.
 
 **Server** (`server/src/__tests__/`) — vitest + supertest. Each test gets a fresh `:memory:`
 database, so tests are isolated and nothing needs cleaning up:
@@ -281,6 +289,28 @@ refetch that follows — enough to cover `useTasks` end to end without a server.
 
 Queries go through roles and labels (`getByRole('button', { name: 'Add' })`) rather than test ids, so
 the tests break when the UI stops being reachable, not when a class name changes.
+
+**End-to-end** (`e2e/`) — Playwright driving Chromium against Vite, Express, and a real SQLite file.
+This is the only tier that exercises the Vite proxy, real HTTP, and data that actually survives a
+page reload:
+
+```ts
+await page.getByRole('button', { name: 'Add', exact: true }).click()
+await page.reload()
+await expect(page.getByText('Write an e2e test')).toBeVisible() // only passes if it reached SQLite
+```
+
+It runs on **its own ports (3002/5174) and its own database** (`data/e2e.sqlite`), so `npm run e2e`
+is safe while `npm run dev` is running and never touches your dev data. `playwright.config.ts`
+starts both servers itself; `e2e/helpers.ts` resets the e2e database before each test.
+
+Two Playwright gotchas the suite already ran into, worth knowing before you write more:
+
+- `getByRole('button', { name: 'Add' })` matches accessible names by **substring**, so it also hit
+  `aria-label="Delete Add a migration"`. Use `exact: true`. React Testing Library defaults to
+  full-string matching, so the jsdom tests do not warn you about this.
+- `.check()` clicks and then verifies the same DOM node. This app replaces the list after every
+  mutation, so that node is detached by then. Use `.click()` and assert on a re-queried locator.
 
 ---
 
@@ -332,19 +362,22 @@ the same file rather than deleting it, so the running server keeps working.
 
 Run from the repo root; add `-w server` or `-w client` to target one workspace.
 
-| Command                           | Does                                             |
-| --------------------------------- | ------------------------------------------------ |
-| `npm run dev`                     | Server and client together                       |
-| `npm run check`                   | typecheck + lint + test — run before committing  |
-| `npm test` / `npm run test:watch` | Vitest across both workspaces, one-shot or watch |
-| `npm run typecheck`               | `tsc --noEmit` across all packages               |
-| `npm run lint` / `npm run format` | ESLint / Prettier                                |
-| `npm run build`                   | Server → `server/dist`, client → `client/dist`   |
-| `npm start`                       | Run the built server                             |
-| `npm run db:migrate`              | Apply pending migrations                         |
-| `npm run db:seed`                 | Insert demo rows (no-op if the table has data)   |
-| `npm run db:reset`                | Drop all tables, migrate, seed                   |
-| `npm run db:checkpoint`           | Fold the WAL into the main database file         |
+| Command                           | Does                                                         |
+| --------------------------------- | ------------------------------------------------------------ |
+| `npm run dev`                     | Server and client together                                   |
+| `npm run check`                   | typecheck + lint + test — run before committing              |
+| `npm test` / `npm run test:watch` | Vitest across both workspaces, one-shot or watch             |
+| `npm run e2e`                     | Playwright end-to-end tests (starts its own servers)         |
+| `npm run e2e:ui`                  | Playwright UI mode — step through a run, time-travel the DOM |
+| `npm run e2e:report`              | Open the HTML report from the last run                       |
+| `npm run typecheck`               | `tsc --noEmit` across all packages                           |
+| `npm run lint` / `npm run format` | ESLint / Prettier                                            |
+| `npm run build`                   | Server → `server/dist`, client → `client/dist`               |
+| `npm start`                       | Run the built server                                         |
+| `npm run db:migrate`              | Apply pending migrations                                     |
+| `npm run db:seed`                 | Insert demo rows (no-op if the table has data)               |
+| `npm run db:reset`                | Drop all tables, migrate, seed                               |
+| `npm run db:checkpoint`           | Fold the WAL into the main database file                     |
 
 ---
 
