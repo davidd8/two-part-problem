@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+*.log
+
+# SQLite database files (keep the directory, ignore the data)
+data/*
+!data/.gitkeep
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+.env
+.env.local
+.DS_Store
