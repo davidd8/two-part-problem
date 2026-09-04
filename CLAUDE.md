@@ -3,7 +3,8 @@
 npm workspaces monorepo: `shared` (zod contracts) → `server` (Express 5 + better-sqlite3) →
 `client` (React 18 + Vite). `README.md` has the long-form tour and a worked
 "add a `projects` resource" example — read its **Adding a feature** section before building a
-new resource, and follow it step for step.
+new resource, and follow it step for step. That section is organized as slices: the `shared/`
+contract lands first and alone, then slice A (server) and slice B (client) run in parallel.
 
 ## Commands
 
@@ -36,6 +37,12 @@ client/src/
 
 ## Rules
 
+- **Scope a change to one slice.** Before writing code, split the work into the `shared/` contract,
+  slice A (`server/src/**`), slice B (`client/src/**`), and any standalone data processing, and say
+  which slice each piece belongs to. The contract goes in first and by itself — `shared/src/index.ts`
+  is the one file both other slices would otherwise contend on. After that A and B are independent
+  (the client types off the contract and stubs `fetch`, so it does not wait for the route), and
+  neither drive-by edits the other's files. `e2e/` spans layers, so it comes last.
 - **Routes never write SQL; repositories never touch `req`/`res`.** This is what keeps
   repositories unit-testable and routes skimmable. Do not blur it.
 - **Contracts live in `shared/`.** Define the zod schema there, `export *` it from

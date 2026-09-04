@@ -107,6 +107,22 @@ makes the repositories directly unit-testable and the routes thin enough to skim
 
 Worked example: a `projects` resource that tasks can belong to.
 
+**Scope the work by layer.** The three workspaces are the seams to split on. The contract in
+`shared/` is the only real coupling point — land it first, on its own, and the server and client
+slices can then be built in parallel by different people without editing the same files.
+
+| Slice           | Owns                                             | Depends on              |
+| --------------- | ------------------------------------------------ | ----------------------- |
+| **1. Contract** | `shared/src/project.ts`, `shared/src/index.ts`   | nothing                 |
+| **A. Server**   | `server/src/{db,repositories,routes}/`, `app.ts` | the contract            |
+| **B. Client**   | `client/src/{lib,components}/`                   | the contract            |
+| **C. Data**     | `server/src/db/seed.ts`, one-off scripts         | the contract, sometimes |
+| **E2E** (join)  | `e2e/`                                           | A and B both landed     |
+
+Slice B does not have to wait for slice A: the client types come from the contract, and the client
+tests stub `fetch`, so the whole UI can be built and tested before the route exists. Keep each change
+inside its own slice — no drive-by edits into another one — and the merges stay trivial.
+
 ### 1. Define the contract — `shared/src/project.ts`
 
 Both sides import this. The server validates with it; the client gets types from it.
@@ -134,7 +150,16 @@ Export it from `shared/src/index.ts`:
 export * from './project.js'
 ```
 
-### 2. Migrate — `server/src/db/migrations/0002_projects.sql`
+That barrel file is the one line both later slices would otherwise contend on, which is the other
+reason this step goes in by itself.
+
+---
+
+### Slice A — server
+
+Everything below lives under `server/src/`. Nothing here imports from `client/`.
+
+#### A1. Migrate — `server/src/db/migrations/0002_projects.sql`
 
 Name it so it sorts after the last migration. It runs once, in a transaction, and is recorded in
 `_migrations`.
@@ -153,7 +178,7 @@ CREATE INDEX idx_tasks_project_id ON tasks (project_id);
 Apply it with `npm run db:migrate`, or just save the file — the dev server runs migrations on boot,
 and `tsx` restarts it when the directory changes.
 
-### 3. Query — `server/src/repositories/projects.ts`
+#### A2. Query — `server/src/repositories/projects.ts`
 
 Prepared statements with named parameters. Map snake_case rows to camelCase domain types here so
 nothing above this layer knows about column names.
@@ -191,7 +216,7 @@ export function createProject(db: Db, input: CreateProjectInput): Project {
 }
 ```
 
-### 4. Expose — `server/src/routes/projects.ts`
+#### A3. Expose — `server/src/routes/projects.ts`
 
 `.parse()` throws on bad input and the error middleware turns that into a 400 with field-level
 details. Thrown `HttpError`s become their status. You do not need try/catch — Express 5 forwards
@@ -217,27 +242,13 @@ export function projectsRouter(db: Db): Router {
 }
 ```
 
-### 5. Mount it — `server/src/app.ts`
+#### A4. Mount it — `server/src/app.ts`
 
 ```ts
 app.use('/api/projects', projectsRouter(db))
 ```
 
-### 6. Call it — `client/src/lib/api.ts`
-
-```ts
-export const api = {
-  // ...
-  listProjects: () => request<Project[]>('/projects'),
-  createProject: (input: CreateProjectInput) =>
-    request<Project>('/projects', { method: 'POST', body: JSON.stringify(input) }),
-}
-```
-
-Request and response are both typed from step 1. Rename a field in the schema and every call site
-that needs updating turns red in `npm run typecheck`.
-
-### 7. Test it — `server/src/__tests__/projects.test.ts`
+#### A5. Test it — `server/src/__tests__/projects.test.ts`
 
 Each test gets a fresh in-memory database, so tests are isolated and there is nothing to clean up.
 
@@ -252,6 +263,79 @@ it('creates a project', async () => {
   expect(res.body.name).toBe('Website')
 })
 ```
+
+`npm test -w server` and `npm run typecheck -w server` verify this slice on its own; the root `npm run check` stays the gate before committing.
+
+---
+
+### Slice B — client
+
+Everything below lives under `client/src/`. It needs the contract from step 1 and nothing else from
+slice A — `fetch` is stubbed in the tests, so this is buildable and verifiable before the route is
+written.
+
+#### B1. Call it — `client/src/lib/api.ts`
+
+```ts
+export const api = {
+  // ...
+  listProjects: () => request<Project[]>('/projects'),
+  createProject: (input: CreateProjectInput) =>
+    request<Project>('/projects', { method: 'POST', body: JSON.stringify(input) }),
+}
+```
+
+Request and response are both typed from step 1. Rename a field in the schema and every call site
+that needs updating turns red in `npm run typecheck`.
+
+#### B2. Load it — `client/src/lib/useProjects.ts`
+
+One hook owns the data and the mutations for the resource, the way `useTasks` does. Components stay
+presentational.
+
+```ts
+export function useProjects() {
+  const [projects, setProjects] = useState<Project[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const refresh = useCallback(async () => {
+    setProjects(await api.listProjects())
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  return { projects, loading, refresh }
+}
+```
+
+#### B3. Test it — `client/src/__tests__/`
+
+`mockFetch` stands in for the API, so this passes with no server running:
+
+```ts
+mockFetch({ 'GET /api/projects': () => jsonResponse([{ id: 1, name: 'Website' }]) })
+render(<ProjectList />)
+expect(await screen.findByText('Website')).toBeInTheDocument()
+```
+
+`npm test -w client` and `npm run typecheck -w client` verify this slice on its own, with no server running.
+
+---
+
+### Slice C — data processing
+
+Anything that is neither a request handler nor UI — demo rows in `server/src/db/seed.ts`, a
+backfill, an import script — is its own slice. Keep it out of the request path and out of the
+repositories that routes call, so it can be written and run without coordinating with A or B.
+
+### Joining the slices back up
+
+The end-to-end tests in `e2e/` are the only tier that spans layers, so they come last, once A and B
+are both in. That is also where a mismatch between the two shows up — everything before it was
+verified against the contract rather than against the other side.
 
 ---
 
