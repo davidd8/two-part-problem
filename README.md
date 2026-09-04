@@ -257,7 +257,7 @@ it('creates a project', async () => {
 
 ## Testing
 
-34 tests in three tiers: 28 fast unit/integration tests that need nothing running, and 6
+35 tests in three tiers: 29 fast unit/integration tests that need nothing running, and 6
 end-to-end tests that drive a real browser against the real stack.
 
 **Server** (`server/src/__tests__/`) — vitest + supertest. Each test gets a fresh `:memory:`
@@ -309,8 +309,9 @@ Two Playwright gotchas the suite already ran into, worth knowing before you writ
 - `getByRole('button', { name: 'Add' })` matches accessible names by **substring**, so it also hit
   `aria-label="Delete Add a migration"`. Use `exact: true`. React Testing Library defaults to
   full-string matching, so the jsdom tests do not warn you about this.
-- `.check()` clicks and then verifies the same DOM node. This app replaces the list after every
-  mutation, so that node is detached by then. Use `.click()` and assert on a re-queried locator.
+- `.check()` verifies the checkbox immediately after clicking it. These checkboxes are controlled by
+  server state, so they only read as checked once the PATCH and the refetch land — the check races
+  and fails. Use `.click()` followed by `expect(...).toBeChecked()`, which retries.
 
 ---
 

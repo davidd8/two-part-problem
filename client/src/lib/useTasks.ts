@@ -8,11 +8,12 @@ import { api, type TaskStatus } from './api.js'
  */
 export function useTasks(status: TaskStatus) {
   const [tasks, setTasks] = useState<Task[]>([])
+  // True only until the first load settles. Refetches after a mutation or a
+  // filter change happen in the background, so the list never flashes away.
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    setLoading(true)
     try {
       const { items } = await api.listTasks(status)
       setTasks(items)

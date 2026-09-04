@@ -30,7 +30,12 @@ function mockBackend(initial: Task[]) {
     },
   })
 
-  return { calls, get tasks() { return tasks } }
+  return {
+    calls,
+    get tasks() {
+      return tasks
+    },
+  }
 }
 
 describe('App', () => {
@@ -90,6 +95,38 @@ describe('App', () => {
     await screen.findByText('Delete me')
     await user.click(screen.getByRole('button', { name: 'Delete Delete me' }))
 
+    expect(await screen.findByText('Nothing here yet.')).toBeInTheDocument()
+  })
+
+  it('keeps the list on screen while refetching after a mutation', async () => {
+    // Hold the refetch open so the intermediate render can be inspected.
+    let releaseRefetch: (() => void) | undefined
+    let gets = 0
+    let tasks = [makeTask({ id: 1, title: 'Existing task' })]
+
+    mockFetch({
+      'GET /api/tasks': async () => {
+        gets += 1
+        if (gets > 1) await new Promise<void>((resolve) => (releaseRefetch = resolve))
+        return jsonResponse({ items: tasks, total: tasks.length })
+      },
+      'DELETE /api/tasks/1': () => {
+        tasks = []
+        return emptyResponse()
+      },
+    })
+    const user = userEvent.setup()
+
+    render(<App />)
+    await screen.findByText('Existing task')
+    await user.click(screen.getByRole('button', { name: 'Delete Existing task' }))
+
+    // Refetch is now in flight and will not resolve until released.
+    await waitFor(() => expect(releaseRefetch).toBeDefined())
+    expect(screen.queryByText('Loading\u2026')).not.toBeInTheDocument()
+    expect(screen.getByText('Existing task')).toBeInTheDocument()
+
+    releaseRefetch?.()
     expect(await screen.findByText('Nothing here yet.')).toBeInTheDocument()
   })
 

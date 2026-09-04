@@ -34,8 +34,9 @@ test('a created task survives a page reload', async ({ page }) => {
 test('completing a task moves it between the filters', async ({ page }) => {
   await page.goto('/')
 
-  // Re-query rather than reuse: the app re-renders the list after every
-  // mutation, so the element clicked is detached by the time it settles.
+  // .click() plus a retrying expectation, not .check(): the checkbox is
+  // controlled by server state, so it only reads as checked once the PATCH
+  // and refetch land. .check() verifies immediately after clicking and races.
   const task = () => page.getByRole('listitem').filter({ hasText: 'Build a feature' })
   await task().getByRole('checkbox').click()
   await expect(task().getByRole('checkbox')).toBeChecked()
