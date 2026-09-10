@@ -21,12 +21,31 @@ server.on('error', (err: NodeJS.ErrnoException) => {
   process.exit(1)
 })
 
+let shuttingDown = false
+
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
+    // A second signal while the first is in flight would re-enter this and log
+    // again; tsx sends one per restart, so the guard keeps the output honest.
+    if (shuttingDown) return
+    shuttingDown = true
     console.log(`\n${signal} received, shutting down`)
+
     server.close(() => {
       closeDb()
       process.exit(0)
     })
+
+    // close() waits on every open socket, and a socket that connected without
+    // ever sending a request (a browser preconnect, a TCP health check) never
+    // counts as idle — closeIdleConnections() leaves it, so close()'s callback
+    // never fires and tsx force-kills us after 5s. Drop them outright.
+    server.closeAllConnections()
+
+    // Backstop for anything else that might hold the loop open.
+    setTimeout(() => {
+      closeDb()
+      process.exit(0)
+    }, 2000).unref()
   })
 }

@@ -1,4 +1,4 @@
-import net from 'node:net'
+import http from 'node:http'
 import { fileURLToPath } from 'node:url'
 import type { ServerResponse } from 'node:http'
 import { defineConfig, loadEnv } from 'vite'
@@ -13,18 +13,28 @@ const BASE_API_PORT = 3001
 /** How long an /api request waits for the API to answer before giving up. */
 const READY_TIMEOUT_MS = 10_000
 
-/** Resolves once something is listening on the API. */
-function probeApi(host: string, port: number): Promise<boolean> {
+/**
+ * Resolves once the API is actually serving. This asks /api/health rather than
+ * opening a bare socket: a raw connect only proves something holds the port,
+ * and it leaves a connected-but-silent socket behind, which is precisely what
+ * stops the server's own `server.close()` from ever completing.
+ */
+function probeApi(target: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const socket = net.connect({ host, port })
-    const settle = (reachable: boolean) => {
-      socket.destroy()
-      resolve(reachable)
-    }
-    socket.setTimeout(500)
-    socket.on('connect', () => settle(true))
-    socket.on('error', () => settle(false))
-    socket.on('timeout', () => settle(false))
+    const req = http.request(
+      `${target}/api/health`,
+      { method: 'GET', timeout: 500, agent: false, headers: { Connection: 'close' } },
+      (res) => {
+        res.resume()
+        resolve(res.statusCode === 200)
+      },
+    )
+    req.on('error', () => resolve(false))
+    req.on('timeout', () => {
+      req.destroy()
+      resolve(false)
+    })
+    req.end()
   })
 }
 
@@ -50,7 +60,6 @@ function respondUnavailable(res: ServerResponse, target: string) {
  * /api requests at the door until the port answers, so the gap is invisible.
  */
 function apiReadyGate(target: string): Plugin {
-  const { hostname, port } = new URL(target)
   return {
     name: 'api-ready-gate',
     apply: 'serve',
@@ -62,7 +71,7 @@ function apiReadyGate(target: string): Plugin {
         }
 
         void (async () => {
-          if (await probeApi(hostname, Number(port))) {
+          if (await probeApi(target)) {
             next()
             return
           }
@@ -71,7 +80,7 @@ function apiReadyGate(target: string): Plugin {
           const deadline = Date.now() + READY_TIMEOUT_MS
           while (Date.now() < deadline) {
             await new Promise((resolve) => setTimeout(resolve, 150))
-            if (await probeApi(hostname, Number(port))) {
+            if (await probeApi(target)) {
               next()
               return
             }
