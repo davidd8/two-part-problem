@@ -20,3 +20,6 @@ data/*
 .env
 .env.local
 .DS_Store
+
+# Local agent/editor config, not part of the scaffold
+.claude/
