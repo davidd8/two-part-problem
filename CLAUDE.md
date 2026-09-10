@@ -1,48 +1,29 @@
 # app-sqlite
 
 npm workspaces monorepo: `shared` (zod contracts) → `server` (Express 5 + better-sqlite3) →
-`client` (React 18 + Vite). `README.md` has the long-form tour and a worked
-"add a `projects` resource" example — read its **Adding a feature** section before building a
-new resource, and follow it step for step. That section is organized as slices: the `shared/`
-contract lands first and alone, then slice A (server) and slice B (client) run in parallel.
+`client` (React 18 + Vite). `README.md` is the long-form tour — the commands table, the dev loop,
+the database conventions and the install gotchas all live there. This file is only what it does
+not already say.
 
-## Commands
+**Before building a new resource, read README's "Adding a feature" and follow it step for step.**
+It works a `projects` resource end to end, organized as the slices below.
 
-Run from the repo root; add `-w server` or `-w client` to narrow.
+## How to work here
 
-| Command                                       | Does                                                                                              |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `npm run dev`                                 | Both servers (client :5173, API :3001; Vite proxies `/api` → API)                                 |
-| `npm run check`                               | typecheck + lint + test — **the gate before committing** (~6s)                                    |
-| `npm run test:watch`                          | Vitest watch across both workspaces — the tightest loop                                           |
-| `npm run e2e`                                 | Playwright; own ports (:5174/:3002) and own database, so it never touches a running `npm run dev` |
-| `npm run db:migrate` / `db:seed` / `db:reset` | Reset drops tables **in place**, so it is safe while the dev server holds the file open           |
+- **Scope a change to one slice, and say which.** Split the work into the `shared/` contract,
+  slice A (`server/src/**`), slice B (`client/src/**`), and any standalone data processing. The
+  contract lands first and alone — `shared/src/index.ts` is the one file the other slices would
+  otherwise contend on. A and B are then independent (the client types off the contract and stubs
+  `fetch`, so it does not wait for the route) and neither drive-by edits the other's files.
+  `e2e/` spans layers, so it comes last.
+- **Write tests only when asked.** Default to shipping just the change so iteration stays quick;
+  reach for coverage when the user asks for it or the work is explicitly meant to land with tests.
+  `npm run check` still runs the existing suite, so don't leave it red.
+- **`npm run check` before committing.** Type errors never surface in the dev server — Vite and
+  `tsx` strip types without checking them, so `typecheck` is the only thing that catches them.
 
-Type errors do not surface in the dev server — Vite and `tsx` strip types without checking them.
-`npm run typecheck` is the only thing that catches them.
+## Invariants
 
-## Layout
-
-```
-shared/src/*.ts       zod schemas + inferred types; imported by BOTH sides
-server/src/
-  app.ts              createApp(db) — db is injected so tests pass their own
-  db/migrations/      NNNN_name.sql, applied in filename order
-  repositories/       all SQL lives here; returns domain types, never raw rows
-  routes/             HTTP only: parse input, call a repository, respond
-client/src/
-  lib/api.ts          typed fetch wrapper, throws ApiRequestError
-  lib/useTasks.ts     data loading + mutations
-```
-
-## Rules
-
-- **Scope a change to one slice.** Before writing code, split the work into the `shared/` contract,
-  slice A (`server/src/**`), slice B (`client/src/**`), and any standalone data processing, and say
-  which slice each piece belongs to. The contract goes in first and by itself — `shared/src/index.ts`
-  is the one file both other slices would otherwise contend on. After that A and B are independent
-  (the client types off the contract and stubs `fetch`, so it does not wait for the route), and
-  neither drive-by edits the other's files. `e2e/` spans layers, so it comes last.
 - **Routes never write SQL; repositories never touch `req`/`res`.** This is what keeps
   repositories unit-testable and routes skimmable. Do not blur it.
 - **Contracts live in `shared/`.** Define the zod schema there, `export *` it from
@@ -52,30 +33,20 @@ client/src/
   owns a `Row` interface and a `toRow`-style mapper (see `repositories/tasks.ts`); the mapping
   never leaks past the repository.
 - **Migrations are append-only.** The runner records applied names in `_migrations`, so editing an
-  applied file silently does nothing — add a new numbered file instead. Prefer a
-  `set_updated_at` trigger over remembering the column in every UPDATE.
+  applied file silently does nothing — add a new numbered file instead. Prefer a `set_updated_at`
+  trigger over remembering the column in every UPDATE.
 - **Errors go through `HttpError`** (`middleware/errors.ts`). Throw `HttpError.notFound(...)` /
   `.badRequest(...)`; the handler maps it, and any `ZodError`, into the shared `ApiError` shape.
-- **Imports:** `verbatimModuleSyntax` + the `consistent-type-imports` lint rule mean type-only
-  imports must be `import type`. Relative imports need the `.js` extension.
-- `strict`, `noUncheckedIndexedAccess`, `noUnusedLocals`, and `noUnusedParameters` are all on.
-
-## Tests
-
-- **Write tests only when asked.** Default to shipping just the change so iteration stays quick;
-  reach for coverage when the user asks for it or the work is explicitly meant to land with tests.
-  `npm run check` still runs the existing suite, so don't leave it red.
-- **Server** — vitest + supertest against `createDatabase(':memory:')`, a fresh db per test
-  (`__tests__/tasks.test.ts` is the template). Fast enough to cover every route.
-- **Client** — vitest + React Testing Library in jsdom with `fetch` stubbed. Globals are not
-  injected: import `describe`/`it`/`expect` from `vitest` explicitly.
-- **E2E** — Playwright against the real stack, serial on one worker sharing one SQLite file;
-  each test calls `resetDatabase()` first.
-
-## Gotchas
-
-- `shared` ships raw TypeScript (`main: ./src/index.ts`), which is why `tsup` needs it in
+- **Relative imports need the `.js` extension**, and type-only imports must be `import type`
+  (`verbatimModuleSyntax` plus the `consistent-type-imports` rule).
+- **`shared` ships raw TypeScript** (`main: ./src/index.ts`), which is why `tsup` needs it in
   `noExternal` and Vite needs `server.fs.allow: ['..']`. New workspace packages need the same.
-- `better-sqlite3` is a native module: `external` in the tsup config, and it plus `esbuild` are
-  pinned in the root `allowScripts` so their install scripts can run. A version bump means
-  updating `allowScripts` or the install warns and the binary is missing.
+
+## Where things live
+
+```
+shared/src/*.ts       zod schemas + inferred types; imported by BOTH sides
+server/src/app.ts     createApp(db) — db is injected so tests pass their own
+server/src/{db/migrations,repositories,routes}/
+client/src/lib/       api.ts (typed fetch, throws ApiRequestError), useTasks.ts (load + mutate)
+```
