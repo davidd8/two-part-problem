@@ -39,8 +39,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  listTasks: (status: TaskStatus = 'all') =>
-    request<TaskList>(`/tasks?status=${status}`),
+  listTasks: (status: TaskStatus = 'all') => request<TaskList>(`/tasks?status=${status}`),
 
   createTask: (input: CreateTaskInput) =>
     request<Task>('/tasks', { method: 'POST', body: JSON.stringify(input) }),

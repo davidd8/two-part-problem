@@ -30,7 +30,11 @@ export const notFoundHandler: RequestHandler = (req) => {
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof z.ZodError) {
     const body: ApiError = {
-      error: { message: 'Validation failed', code: 'validation_error', details: z.treeifyError(err) },
+      error: {
+        message: 'Validation failed',
+        code: 'validation_error',
+        details: z.treeifyError(err),
+      },
     }
     res.status(400).json(body)
     return

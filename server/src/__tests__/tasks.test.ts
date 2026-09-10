@@ -45,7 +45,10 @@ describe('/api/tasks', () => {
   it('toggles done and filters by status', async () => {
     const { body: task } = await request(app).post('/api/tasks').send({ title: 'Toggle me' })
 
-    const updated = await request(app).patch(`/api/tasks/${task.id}`).send({ done: true }).expect(200)
+    const updated = await request(app)
+      .patch(`/api/tasks/${task.id}`)
+      .send({ done: true })
+      .expect(200)
     expect(updated.body.done).toBe(true)
 
     await request(app).get('/api/tasks?status=open').expect(200, { items: [], total: 0 })

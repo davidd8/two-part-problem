@@ -33,7 +33,10 @@ export function runMigrations(db: Db, dir?: string): string[] {
   `)
 
   const applied = new Set(
-    db.prepare<[], { name: string }>('SELECT name FROM _migrations').all().map((row) => row.name),
+    db
+      .prepare<[], { name: string }>('SELECT name FROM _migrations')
+      .all()
+      .map((row) => row.name),
   )
 
   const record = db.prepare<[string]>('INSERT INTO _migrations (name) VALUES (?)')

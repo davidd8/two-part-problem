@@ -8,7 +8,9 @@ const SEED_TASKS = [
 
 /** Inserts demo rows. Idempotent: does nothing if the table already has data. */
 export function seed(db: Db): number {
-  const { count } = db.prepare<[], { count: number }>('SELECT count(*) AS count FROM tasks').get() as {
+  const { count } = db
+    .prepare<[], { count: number }>('SELECT count(*) AS count FROM tasks')
+    .get() as {
     count: number
   }
   if (count > 0) return 0

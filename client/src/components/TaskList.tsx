@@ -20,7 +20,11 @@ export function TaskList({ tasks, onToggle, onDelete }: Props) {
             <span className="task-title">{task.title}</span>
           </label>
           {task.notes && <p className="task-notes">{task.notes}</p>}
-          <button className="delete" onClick={() => onDelete(task)} aria-label={`Delete ${task.title}`}>
+          <button
+            className="delete"
+            onClick={() => onDelete(task)}
+            aria-label={`Delete ${task.title}`}
+          >
             ×
           </button>
         </li>
