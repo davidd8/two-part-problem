@@ -1,12 +1,20 @@
+import { fileURLToPath } from 'node:url'
+import { config as loadDotenv } from 'dotenv'
 import { defineConfig, devices } from '@playwright/test'
 
 /**
  * E2E runs the real stack — Vite, the Express API, and a real SQLite file —
  * on its own ports and its own database, so it never collides with or
- * clobbers a `npm run dev` session on 5173/3001.
+ * clobbers a `npm run dev` session on 5173/3001 — or another clone's, when
+ * PORT_OFFSET is set.
  */
-const API_PORT = 3002
-const WEB_PORT = 5174
+// PORT_OFFSET in the root .env moves this clone's whole block of ports, so a
+// second clone can run its own e2e at the same time. See server/src/env.ts.
+loadDotenv({ path: fileURLToPath(new URL('.env', import.meta.url)), quiet: true })
+const PORT_OFFSET = Number(process.env.PORT_OFFSET ?? 0)
+
+const API_PORT = 3002 + PORT_OFFSET
+const WEB_PORT = 5174 + PORT_OFFSET
 
 export const E2E_DATABASE_PATH = './data/e2e.sqlite'
 

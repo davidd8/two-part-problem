@@ -1,20 +1,22 @@
 import net from 'node:net'
+import { fileURLToPath } from 'node:url'
 import type { ServerResponse } from 'node:http'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import type { ApiError } from '@app/shared'
 
-const API_TARGET = process.env.API_TARGET ?? 'http://localhost:3001'
-const { hostname: API_HOST, port: API_PORT } = new URL(API_TARGET)
+/** Mirrors BASE_PORTS in server/src/env.ts — see the comment there. */
+const BASE_WEB_PORT = 5173
+const BASE_API_PORT = 3001
 
 /** How long an /api request waits for the API to answer before giving up. */
 const READY_TIMEOUT_MS = 10_000
 
-/** Resolves once something is listening on the API port. */
-function probeApi(): Promise<boolean> {
+/** Resolves once something is listening on the API. */
+function probeApi(host: string, port: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const socket = net.connect({ host: API_HOST, port: Number(API_PORT) })
+    const socket = net.connect({ host, port })
     const settle = (reachable: boolean) => {
       socket.destroy()
       resolve(reachable)
@@ -27,11 +29,11 @@ function probeApi(): Promise<boolean> {
 }
 
 /** The ApiError the client already knows how to render, not a proxy stack trace. */
-function respondUnavailable(res: ServerResponse) {
+function respondUnavailable(res: ServerResponse, target: string) {
   if (res.headersSent) return
   const body: ApiError = {
     error: {
-      message: `The API at ${API_TARGET} is not reachable — is it still running?`,
+      message: `The API at ${target} is not reachable — is it still running?`,
       code: 'api_unavailable',
     },
   }
@@ -47,7 +49,8 @@ function respondUnavailable(res: ServerResponse) {
  * ECONNREFUSED stack trace in the terminal and a 500 in the browser. Hold
  * /api requests at the door until the port answers, so the gap is invisible.
  */
-function apiReadyGate(): Plugin {
+function apiReadyGate(target: string): Plugin {
+  const { hostname, port } = new URL(target)
   return {
     name: 'api-ready-gate',
     apply: 'serve',
@@ -59,48 +62,59 @@ function apiReadyGate(): Plugin {
         }
 
         void (async () => {
-          if (await probeApi()) {
+          if (await probeApi(hostname, Number(port))) {
             next()
             return
           }
 
-          server.config.logger.info(`  ➜  waiting for the API on ${API_TARGET} …`)
+          server.config.logger.info(`  ➜  waiting for the API on ${target} …`)
           const deadline = Date.now() + READY_TIMEOUT_MS
           while (Date.now() < deadline) {
             await new Promise((resolve) => setTimeout(resolve, 150))
-            if (await probeApi()) {
+            if (await probeApi(hostname, Number(port))) {
               next()
               return
             }
           }
-          respondUnavailable(res)
+          respondUnavailable(res, target)
         })()
       })
     },
   }
 }
 
-export default defineConfig({
-  plugins: [react(), apiReadyGate()],
-  server: {
-    port: 5173,
-    // Everything under /api goes to the Express server, so the browser sees one origin.
-    proxy: {
-      '/api': {
-        target: API_TARGET,
-        changeOrigin: true,
-        configure(proxy) {
-          // Backstop: the API can still drop between the probe and the proxied
-          // request. Answer in the shared error shape rather than a raw 500.
-          proxy.on('error', (err, _req, res) => {
-            console.warn(`[api proxy] ${err.message}`)
-            if ('writeHead' in res) respondUnavailable(res)
-          })
+export default defineConfig(({ mode }) => {
+  // The root .env is the server's, not the client's — read it only for the port
+  // offset. Nothing here reaches the browser bundle; that still needs VITE_*.
+  const repoRoot = fileURLToPath(new URL('..', import.meta.url))
+  const offset = Number(loadEnv(mode, repoRoot, '').PORT_OFFSET ?? 0)
+  const apiTarget = process.env.API_TARGET ?? `http://localhost:${BASE_API_PORT + offset}`
+
+  return {
+    plugins: [react(), apiReadyGate(apiTarget)],
+    server: {
+      port: BASE_WEB_PORT + offset,
+      // Fail loudly on a clash instead of sliding onto the next port — which is
+      // the e2e web port, and would quietly proxy to another clone's API.
+      strictPort: true,
+      // Everything under /api goes to the Express server, so the browser sees one origin.
+      proxy: {
+        '/api': {
+          target: apiTarget,
+          changeOrigin: true,
+          configure(proxy) {
+            // Backstop: the API can still drop between the probe and the proxied
+            // request. Answer in the shared error shape rather than a raw 500.
+            proxy.on('error', (err, _req, res) => {
+              console.warn(`[api proxy] ${err.message}`)
+              if ('writeHead' in res) respondUnavailable(res, apiTarget)
+            })
+          },
         },
       },
+      // Allow importing the shared workspace package from outside client/.
+      fs: { allow: ['..'] },
     },
-    // Allow importing the shared workspace package from outside client/.
-    fs: { allow: ['..'] },
-  },
-  build: { outDir: 'dist', sourcemap: true },
+    build: { outDir: 'dist', sourcemap: true },
+  }
 })

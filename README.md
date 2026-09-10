@@ -473,9 +473,41 @@ readable message rather than at the first query.
 
 | Variable        | Default             | Notes                                               |
 | --------------- | ------------------- | --------------------------------------------------- |
-| `PORT`          | `3001`              | Express port                                        |
+| `PORT_OFFSET`   | `0`                 | Shifts every port this clone uses — see below       |
+| `PORT`          | derived             | Pins the API port directly, ignoring `PORT_OFFSET`  |
 | `NODE_ENV`      | `development`       | `test` silences the request logger                  |
 | `DATABASE_PATH` | `./data/app.sqlite` | Relative to the repo root; `:memory:` for ephemeral |
+
+---
+
+## Running two clones at once
+
+Each clone has its own `node_modules`, its own `.env` and its own SQLite file, so the only thing
+two of them contend on is **ports**. `PORT_OFFSET` in `.env` moves a clone's whole block out of
+the way:
+
+| `PORT_OFFSET` | dev API | dev web | e2e API | e2e web |
+| ------------- | ------- | ------- | ------- | ------- |
+| `0` (default) | 3001    | 5173    | 3002    | 5174    |
+| `10`          | 3011    | 5183    | 3012    | 5184    |
+| `20`          | 3021    | 5193    | 3022    | 5194    |
+
+Use multiples of 10. An offset of `1` would put this clone's dev API on 3002 — the _other_
+clone's e2e port.
+
+```bash
+git clone https://github.com/davidd8/app-sqlite-starter.git app-sqlite-b
+cd app-sqlite-b
+npm install
+cp .env.example .env
+echo 'PORT_OFFSET=10' >> .env    # or edit the line that's already there
+npm run db:reset
+npm run dev                      # API on :3011, web on :5183
+```
+
+Both clones can then run `npm run dev` and `npm run e2e` simultaneously without touching each
+other's data. If you forget the offset, both halves fail loudly rather than silently sharing:
+Vite refuses to start (`strictPort`) and the API prints which port is taken and what to set.
 
 ---
 
