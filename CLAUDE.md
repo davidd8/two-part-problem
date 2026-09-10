@@ -62,6 +62,9 @@ client/src/
 
 ## Tests
 
+- **Write tests only when asked.** Default to shipping just the change so iteration stays quick;
+  reach for coverage when the user asks for it or the work is explicitly meant to land with tests.
+  `npm run check` still runs the existing suite, so don't leave it red.
 - **Server** — vitest + supertest against `createDatabase(':memory:')`, a fresh db per test
   (`__tests__/tasks.test.ts` is the template). Fast enough to cover every route.
 - **Client** — vitest + React Testing Library in jsdom with `fetch` stubbed. Globals are not
