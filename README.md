@@ -15,8 +15,8 @@ You need **Node 20.11+** (developed on 24) and nothing else. No Docker, no datab
 `brew install`.
 
 ```bash
-git clone https://github.com/davidd8/app-sqlite.git
-cd app-sqlite
+git clone https://github.com/davidd8/app-sqlite-starter.git
+cd app-sqlite-starter
 npm install
 cp .env.example .env
 npm run db:reset        # create the database, run migrations, insert demo rows
