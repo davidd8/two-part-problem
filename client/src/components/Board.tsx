@@ -1,10 +1,12 @@
 import type { Cell, Game } from '@app/shared'
 
+import type { Point } from '../lib/useGame.js'
+
 interface Props {
   game: Game
-  onReveal: (row: number, col: number) => void
-  onFlag: (row: number, col: number) => void
-  onChord: (row: number, col: number) => void
+  onReveal: (p: Point) => void
+  onFlag: (p: Point) => void
+  onChord: (p: Point) => void
 }
 
 function cellLabel(cell: Cell, row: number, col: number): string {
@@ -23,11 +25,13 @@ function cellText(cell: Cell): string {
 }
 
 /**
- * The grid. Left click reveals, right click flags, and clicking a revealed
- * number chords. Cells are buttons so the board is keyboard reachable.
+ * The classic 2D grid, used for single-layer, single-tick boards. Left click
+ * reveals, right click flags, and clicking a revealed number chords. Cells are
+ * buttons so the board is keyboard reachable.
  */
 export function Board({ game, onReveal, onFlag, onChord }: Props) {
   const over = game.status !== 'playing'
+  const grid = game.cells[0]?.[0] ?? []
 
   return (
     <div
@@ -37,8 +41,9 @@ export function Board({ game, onReveal, onFlag, onChord }: Props) {
       style={{ gridTemplateColumns: `repeat(${game.width}, var(--cell))` }}
       onContextMenu={(event) => event.preventDefault()}
     >
-      {game.cells.map((cells, row) =>
+      {grid.map((cells, row) =>
         cells.map((cell, col) => {
+          const p: Point = { x: col, y: row, z: 0, t: 0 }
           const classes = ['cell', cell.state]
           if (cell.mine) classes.push('mine')
           if (cell.state === 'revealed' && cell.adjacentMines)
@@ -51,15 +56,15 @@ export function Board({ game, onReveal, onFlag, onChord }: Props) {
               role="gridcell"
               aria-label={cellLabel(cell, row, col)}
               disabled={over}
-              onClick={() => (cell.state === 'revealed' ? onChord(row, col) : onReveal(row, col))}
+              onClick={() => (cell.state === 'revealed' ? onChord(p) : onReveal(p))}
               onContextMenu={(event) => {
                 event.preventDefault()
-                if (cell.state !== 'revealed') onFlag(row, col)
+                if (cell.state !== 'revealed') onFlag(p)
               }}
               onKeyDown={(event) => {
                 if (event.key === 'f' || event.key === 'F') {
                   event.preventDefault()
-                  if (cell.state !== 'revealed') onFlag(row, col)
+                  if (cell.state !== 'revealed') onFlag(p)
                 }
               }}
             >

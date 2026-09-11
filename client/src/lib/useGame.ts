@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Difficulty, Game, GameStats, MoveInput } from '@app/shared'
+
+/** A cell address: x across, y down, z into the board, t the time slice. */
+export interface Point {
+  x: number
+  y: number
+  z: number
+  t: number
+}
 import { api, ApiRequestError } from './api.js'
 
 const STORAGE_KEY = 'minesweeper.gameId'
@@ -34,6 +42,10 @@ export function useGame(initialDifficulty: Difficulty = 'beginner') {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
+  /** Time slice being viewed. */
+  const [tick, setTick] = useState(0)
+  /** Depth layers hidden from the top so the interior of a 3D board is reachable. */
+  const [cut, setCut] = useState(0)
   // Serialises moves so a fast double-click cannot race two requests.
   const busy = useRef(false)
 
@@ -55,6 +67,8 @@ export function useGame(initialDifficulty: Difficulty = 'beginner') {
         storeId(created.id)
         setDifficulty(nextDifficulty)
         setGame(created)
+        setTick(0)
+        setCut(0)
         setError(null)
       } catch (err) {
         fail(err)
@@ -127,6 +141,9 @@ export function useGame(initialDifficulty: Difficulty = 'beginner') {
       ? 0
       : (game.elapsedMs ?? Math.max(0, now - new Date(game.startedAt).getTime()))
 
+  const ticks = game?.ticks ?? 1
+  const depth = game?.depth ?? 1
+
   return {
     game,
     stats,
@@ -134,10 +151,14 @@ export function useGame(initialDifficulty: Difficulty = 'beginner') {
     loading,
     error,
     elapsedMs,
+    tick: Math.min(tick, ticks - 1),
+    setTick: (next: number) => setTick(Math.max(0, Math.min(ticks - 1, next))),
+    cut: Math.min(cut, depth - 1),
+    setCut: (next: number) => setCut(Math.max(0, Math.min(depth - 1, next))),
     newGame,
-    reveal: (row: number, col: number) => move({ action: 'reveal', row, col }),
-    flag: (row: number, col: number) => move({ action: 'flag', row, col }),
-    chord: (row: number, col: number) => move({ action: 'chord', row, col }),
+    reveal: (p: Point) => move({ action: 'reveal', ...p }),
+    flag: (p: Point) => move({ action: 'flag', ...p }),
+    chord: (p: Point) => move({ action: 'chord', ...p }),
     dismissError: () => setError(null),
   }
 }

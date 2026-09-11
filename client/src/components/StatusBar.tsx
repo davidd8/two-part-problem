@@ -4,8 +4,17 @@ import { formatElapsed } from '../lib/useGame.js'
 interface Props {
   game: Game | null
   difficulty: Difficulty
+  /** Time slice being viewed; the mine counter is per tick. */
+  tick: number
   elapsedMs: number
   onNewGame: (difficulty: Difficulty) => void
+}
+
+function describe(level: Difficulty): string {
+  const { width, height, depth, ticks, mines } = DIFFICULTIES[level]
+  const size = depth > 1 ? `${width}×${height}×${depth}` : `${width}×${height}`
+  const time = ticks > 1 ? ` · ${ticks} ticks` : ''
+  return `${level} (${size}${time}, ${mines} mines)`
 }
 
 const FACES: Record<Game['status'], string> = { playing: '🙂', won: '😎', lost: '😵' }
@@ -15,9 +24,9 @@ const LABELS: Record<Game['status'], string> = {
   lost: 'Boom!',
 }
 
-export function StatusBar({ game, difficulty, elapsedMs, onNewGame }: Props) {
+export function StatusBar({ game, difficulty, tick, elapsedMs, onNewGame }: Props) {
   const status = game?.status ?? 'playing'
-  const minesLeft = game ? game.mines - game.flagsPlaced : 0
+  const minesLeft = game ? game.mines - (game.flagsByTick[tick] ?? 0) : 0
 
   return (
     <div className="status-bar">
@@ -52,8 +61,7 @@ export function StatusBar({ game, difficulty, elapsedMs, onNewGame }: Props) {
           >
             {(Object.keys(DIFFICULTIES) as Difficulty[]).map((level) => (
               <option key={level} value={level}>
-                {level} ({DIFFICULTIES[level].width}×{DIFFICULTIES[level].height},{' '}
-                {DIFFICULTIES[level].mines} mines)
+                {describe(level)}
               </option>
             ))}
           </select>

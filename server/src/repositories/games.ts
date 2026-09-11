@@ -1,12 +1,21 @@
 import type { Difficulty, Game, GameStats, GameStatus, ScoreEntry } from '@app/shared'
 import type { Db } from '../db/index.js'
-import { computeScore, flagsPlaced, toCells, type Board } from '../game/minesweeper.js'
+import {
+  computeScore,
+  flagsByTick,
+  flagsPlaced,
+  toCells,
+  upgradeBoard,
+  type Board,
+} from '../game/minesweeper.js'
 
 interface GameRow {
   id: number
   difficulty: Difficulty
   width: number
   height: number
+  depth: number
+  ticks: number
   mines: number
   status: GameStatus
   board: string
@@ -24,7 +33,7 @@ export interface StoredGame {
 }
 
 function toStoredGame(row: GameRow): StoredGame {
-  const board = JSON.parse(row.board) as Board
+  const board = upgradeBoard(JSON.parse(row.board) as Board)
   return {
     board,
     game: {
@@ -32,10 +41,14 @@ function toStoredGame(row: GameRow): StoredGame {
       difficulty: row.difficulty,
       width: row.width,
       height: row.height,
+      depth: row.depth,
+      ticks: row.ticks,
       mines: row.mines,
       status: row.status,
       cells: toCells(board),
       flagsPlaced: flagsPlaced(board),
+      flagsByTick: flagsByTick(board),
+      wind: row.status === 'playing' ? null : board.wind,
       score: row.score,
       startedAt: row.started_at,
       finishedAt: row.finished_at,
@@ -46,19 +59,21 @@ function toStoredGame(row: GameRow): StoredGame {
 }
 
 const COLUMNS =
-  'id, difficulty, width, height, mines, status, board, score, started_at, finished_at, elapsed_ms, created_at'
+  'id, difficulty, width, height, depth, ticks, mines, status, board, score, started_at, finished_at, elapsed_ms, created_at'
 
 export function createGame(db: Db, difficulty: Difficulty, board: Board): StoredGame {
   const row = db
     .prepare<Record<string, unknown>, GameRow>(
-      `INSERT INTO games (difficulty, width, height, mines, board)
-       VALUES (:difficulty, :width, :height, :mines, :board)
+      `INSERT INTO games (difficulty, width, height, depth, ticks, mines, board)
+       VALUES (:difficulty, :width, :height, :depth, :ticks, :mines, :board)
        RETURNING ${COLUMNS}`,
     )
     .get({
       difficulty,
       width: board.width,
       height: board.height,
+      depth: board.depth,
+      ticks: board.ticks,
       mines: board.mineCount,
       board: JSON.stringify(board),
     })

@@ -34,8 +34,10 @@ export function gamesRouter(db: Db): Router {
     if (stored.game.status !== 'playing') {
       throw new HttpError(409, `Game ${id} is already ${stored.game.status}`, 'game_over')
     }
-    if (!inBounds(stored.board, move.row, move.col)) {
-      throw HttpError.badRequest(`Cell (${move.row}, ${move.col}) is off the board`)
+    if (!inBounds(stored.board, move)) {
+      throw HttpError.badRequest(
+        `Cell (${move.x}, ${move.y}, ${move.z}) at tick ${move.t} is off the board`,
+      )
     }
 
     const board = applyMove(stored.board, move, Math.random)
