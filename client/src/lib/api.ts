@@ -1,4 +1,13 @@
-import type { ApiError, CreateTaskInput, Task, UpdateTaskInput } from '@app/shared'
+import type {
+  ApiError,
+  CreateGameInput,
+  CreateTaskInput,
+  Game,
+  GameStats,
+  MoveInput,
+  Task,
+  UpdateTaskInput,
+} from '@app/shared'
 
 export interface TaskList {
   items: Task[]
@@ -48,4 +57,14 @@ export const api = {
     request<Task>(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
 
   deleteTask: (id: number) => request<void>(`/tasks/${id}`, { method: 'DELETE' }),
+
+  createGame: (input: CreateGameInput) =>
+    request<Game>('/games', { method: 'POST', body: JSON.stringify(input) }),
+
+  getGame: (id: number) => request<Game>(`/games/${id}`),
+
+  makeMove: (id: number, move: MoveInput) =>
+    request<Game>(`/games/${id}/moves`, { method: 'POST', body: JSON.stringify(move) }),
+
+  getGameStats: () => request<GameStats>('/games/stats'),
 }

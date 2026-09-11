@@ -4,6 +4,7 @@ import type { Db } from './db/index.js'
 import { errorHandler, notFoundHandler } from './middleware/errors.js'
 import { requestLogger } from './middleware/request-logger.js'
 import { tasksRouter } from './routes/tasks.js'
+import { gamesRouter } from './routes/games.js'
 
 /**
  * Builds the Express app around a database handle.
@@ -22,6 +23,7 @@ export function createApp(db: Db) {
   })
 
   app.use('/api/tasks', tasksRouter(db))
+  app.use('/api/games', gamesRouter(db))
 
   app.use(notFoundHandler)
   app.use(errorHandler)

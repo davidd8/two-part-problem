@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { Task } from '@app/shared'
-import { App } from '../App.js'
+import { TasksApp as App } from '../components/TasksApp.js'
 import { emptyResponse, jsonResponse, makeTask, mockFetch } from './helpers.js'
 
 afterEach(() => {

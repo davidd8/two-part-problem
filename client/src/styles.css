@@ -160,3 +160,215 @@ button:disabled {
   color: inherit;
   font-size: 0.8rem;
 }
+
+/* ---- Minesweeper ---- */
+
+.game-app {
+  max-width: none;
+  width: fit-content;
+  min-width: min(42rem, 100%);
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.counters {
+  display: flex;
+  gap: 1rem;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+}
+
+.face {
+  font-size: 1.6rem;
+  line-height: 1;
+  padding: 0.35rem 0.5rem;
+}
+
+.controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.difficulty {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+select {
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0.45rem 0.6rem;
+}
+
+.outcome {
+  min-height: 1.4em;
+  margin: 0 0 0.75rem;
+  font-weight: 600;
+}
+
+.board {
+  --cell: 30px;
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  background: var(--border);
+  border-radius: 8px;
+  user-select: none;
+}
+
+.cell {
+  width: var(--cell);
+  height: var(--cell);
+  padding: 0;
+  border-radius: 3px;
+  border: 1px solid #3a4152;
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+
+.cell.hidden,
+.cell.flagged {
+  background: linear-gradient(#323949, #262c3a);
+  box-shadow: inset 1px 1px 0 #4a5266;
+}
+
+.cell.hidden:hover:not(:disabled) {
+  background: linear-gradient(#3d4557, #2f3646);
+}
+
+.cell.revealed {
+  background: #12151c;
+  border-color: #1f2430;
+  cursor: default;
+}
+
+.cell:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.cell.mine {
+  background: var(--danger);
+  color: #1a0a0a;
+}
+
+.board-won .cell.mine {
+  background: #4fbf8a;
+}
+
+.cell.n1 {
+  color: #6ea8fe;
+}
+.cell.n2 {
+  color: #4fbf8a;
+}
+.cell.n3 {
+  color: #f2777a;
+}
+.cell.n4 {
+  color: #b48ead;
+}
+.cell.n5 {
+  color: #d08770;
+}
+.cell.n6 {
+  color: #88c0d0;
+}
+.cell.n7 {
+  color: #e6e8ee;
+}
+.cell.n8 {
+  color: #8b93a7;
+}
+
+.scoreboard {
+  margin-top: 2rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.scoreboard h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.15rem;
+}
+
+.scoreboard h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.record {
+  margin: 0 0 1rem;
+  color: var(--muted);
+}
+
+.scoreboard-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.top-scores,
+.best-times {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.best-times {
+  list-style: none;
+  padding-left: 0;
+}
+
+.top-scores li,
+.best-times li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.meta {
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+@media (max-width: 600px) {
+  .scoreboard-columns {
+    grid-template-columns: 1fr;
+  }
+}
