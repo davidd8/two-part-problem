@@ -480,34 +480,80 @@ readable message rather than at the first query.
 
 ---
 
-## Running two clones at once
+## Running several features side by side
 
-Each clone has its own `node_modules`, its own `.env` and its own SQLite file, so the only thing
-two of them contend on is **ports**. `PORT_OFFSET` in `.env` moves a clone's whole block out of
-the way:
+One feature per clone. Each clone gets its own branch and its own block of ports, and because
+`node_modules`, `.env` and `data/*.sqlite` are all per-directory, that is the whole isolation story.
 
-| `PORT_OFFSET` | dev API | dev web | e2e API | e2e web |
-| ------------- | ------- | ------- | ------- | ------- |
-| `0` (default) | 3001    | 5173    | 3002    | 5174    |
-| `10`          | 3011    | 5183    | 3012    | 5184    |
-| `20`          | 3021    | 5193    | 3022    | 5194    |
+| Directory            | Branch      | `PORT_OFFSET` | dev API | dev web | e2e API | e2e web |
+| -------------------- | ----------- | ------------- | ------- | ------- | ------- | ------- |
+| `app-sqlite-starter` | `main`      | `0`           | 3001    | 5173    | 3002    | 5174    |
+| `app-sqlite-a`       | `feature-a` | `10`          | 3011    | 5183    | 3012    | 5184    |
+| `app-sqlite-b`       | `feature-b` | `20`          | 3021    | 5193    | 3022    | 5194    |
 
-Use multiples of 10. An offset of `1` would put this clone's dev API on 3002 — the _other_
-clone's e2e port.
+Use multiples of 10. An offset of `1` would put one clone's dev API on 3002 — another clone's e2e
+port. Keeping the original directory on `main` at offset `0` is worth it: you always have a clean
+copy to compare against and to merge into.
+
+### Setting up a feature clone
 
 ```bash
-git clone https://github.com/davidd8/app-sqlite-starter.git app-sqlite-b
-cd app-sqlite-b
+git clone https://github.com/davidd8/app-sqlite-starter.git app-sqlite-a
+cd app-sqlite-a
+git switch -c feature-a
 npm install
 cp .env.example .env
-echo 'PORT_OFFSET=10' >> .env    # or edit the line that's already there
+sed -i '' 's/^PORT_OFFSET=0/PORT_OFFSET=10/' .env   # 20 for the next one
 npm run db:reset
-npm run dev                      # API on :3011, web on :5183
+npm run dev                                          # API :3011, web :5183
 ```
 
-Both clones can then run `npm run dev` and `npm run e2e` simultaneously without touching each
-other's data. If you forget the offset, both halves fail loudly rather than silently sharing:
-Vite refuses to start (`strictPort`) and the API prints which port is taken and what to set.
+About five seconds of setup. From here the clone is completely independent — `npm run dev`,
+`npm run check` and `npm run e2e` all work at the same time as every other clone, against its own
+database.
+
+If you forget the offset, both halves fail loudly rather than quietly sharing: Vite refuses to
+start (`strictPort`), and the API prints which port is taken and what to set.
+
+### Moving commits between clones
+
+Clones can fetch from each other directly, so work in progress does not have to round-trip through
+GitHub:
+
+```bash
+# from app-sqlite-b, to build on a commit that only exists in app-sqlite-a
+git remote add a ../app-sqlite-a
+git fetch a
+git rebase a/feature-a
+```
+
+### The two things that actually collide
+
+Everything else is per-clone. These two are shared, and both bite at merge time rather than while
+you work.
+
+**The contract.** `shared/src/index.ts` is the one file every slice touches. Land a new contract on
+`main` first, by itself, then start the feature branches from it — that is what the "Adding a
+feature" section means by the contract going in first and alone.
+
+**Migration numbers.** Migrations are recorded by _filename_, and applied in filename order. If two
+clones both add `0002_*.sql`, each database ends up with a different history:
+
+```
+clone B applies its own:   0002_zzz_tags.sql
+then merges A's:           0002_aaa_projects.sql   <- applied second, after zzz
+a fresh npm run db:reset:  0002_aaa_projects.sql, 0002_zzz_tags.sql   <- aaa first
+```
+
+Same code, two different schema orders — so a migration that works in your clone can fail on a
+fresh reset, or for whoever merges next. Claim distinct numbers up front (feature A takes `0002`,
+feature B takes `0003`), or renumber before merging.
+
+### Finishing a feature
+
+Run `npm run check` and `npm run e2e` in the feature clone, push the branch, and merge it on
+GitHub. Then in the `main` clone, `git pull` and `npm run db:reset` to pick up any new migration.
+When the branch is merged, `rm -rf` the clone — nothing lives in it that is not on the remote.
 
 ---
 
